@@ -1,6 +1,3 @@
-Claro, aquí tienes el contenido listo para copiar y pegar directamente en tu archivo `README.md`:
-
-```markdown
 # 🤖 WABuddy
 
 **WABuddy** es una aplicación de escritorio construida con **Python y PyQt5** que permite automatizar el envío de mensajes personalizados a través de WhatsApp, generados mediante **inteligencia artificial (OpenAI)**, a partir de datos cargados desde un archivo Excel.
