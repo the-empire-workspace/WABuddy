@@ -3,9 +3,9 @@ from src.bootstrap.open_ai import OpenAIDriver
 import os
 import requests
 from src.utils.generate_appsecret_proof import generate_appsecret_proof
-
+from src.utils.worker_signal import WorkerSignals
 class WhatsAppWorker(QRunnable):
-    def __init__(self, row, prompt, callback, token):
+    def __init__(self, row, prompt, token, open_data: dict):
         super().__init__()
 
         self.url = os.getenv("WHATSAPP_API")
@@ -13,9 +13,9 @@ class WhatsAppWorker(QRunnable):
         self.row = row
         self.token = token
         self.prompt = prompt
-        self.openai = OpenAIDriver()
-        self.callback = callback
-
+        self.openai = OpenAIDriver(open_data)
+        self.signals = WorkerSignals()
+        
     @pyqtSlot()
     def run(self):
         message = self.openai.get_response(self.prompt)
@@ -45,4 +45,4 @@ class WhatsAppWorker(QRunnable):
         except Exception as e:
             print(f"Error enviando mensaje: {e}")
 
-        self.callback(self.row, message, whatsapp_active)
+        self.signals.result.emit(self.row, message, whatsapp_active)

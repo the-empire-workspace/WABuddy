@@ -1,14 +1,15 @@
 from openai import OpenAI
 import os
 class OpenAIDriver:
-    def __init__(self):
+    def __init__(self, open_data: dict):
         self.client = OpenAI()
         self.client.api_key = os.getenv("OPENAI_API_KEY")
+        self.open_data = open_data
 
     def get_response(self, prompt: str) -> str:
         response = self.client.responses.create(
             model="gpt-4o-mini",
-            instructions="Eres Maria Bracho, Vendedora de la empresa, Genera un mensaje único para el usuario basado en el texto ingresado",
+            instructions=f"Eres {self.open_data['name']}, {self.open_data['context']}",
             input=prompt
         )
         return response.output_text

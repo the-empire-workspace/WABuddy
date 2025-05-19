@@ -2,6 +2,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QDialog, QTableWi
 from PyQt5.QtCore import QThreadPool, QTimer
 from src.components.label import build_label
 from src.components.text_input import build_text_input
+from src.components.input import build_input
 from src.components.button import build_button
 from src.utils.load_excel import load_excel, export_to_excel
 from datetime import datetime, timedelta
@@ -10,6 +11,7 @@ from src.bootstrap.whatsapp_worker import WhatsAppWorker
 from src.screens.FacebookAuth import FacebookAuth
 import random
 import os
+import json
 load_dotenv()
 
 
@@ -17,13 +19,14 @@ class DashboardApp(QWidget):
     def __init__(self):
         super().__init__()
         self.widgets = []
-        
+
         self.token = None
         self.facebook_auth = FacebookAuth(os.getenv("FACEBOOK_APP_ID"), os.getenv(
             "FACEBOOK_APP_SECRET"), "whatsapp_business_messaging,business_management", self.on_login_success)
         self.init_ui()
         self.add_widgets()
         self.thread_pool = QThreadPool()
+        self.thread_pool.setMaxThreadCount(1)
 
     def init_ui(self):
         if self.token is None:
@@ -33,14 +36,25 @@ class DashboardApp(QWidget):
             self.layout = QVBoxLayout()
             button_layout = QHBoxLayout()
             button_layout.setSpacing(10)
-            label = build_label("Ingrese texto:")
-            self.status_label = build_label("")
-            self.widgets.append(label)
 
+            label = build_label("Ingresa nombre:")
+            self.widgets.append(label)
+            self.name_input = build_input("")
+            self.widgets.append(self.name_input)
+
+            label = build_label("Ingresa Contexto:")
+            self.widgets.append(label)
+            self.context_input = build_input("")
+            self.widgets.append(self.context_input)
+
+            label = build_label("Ingresa texto:")
+            self.widgets.append(label)
             self.text_input = build_text_input("")
             self.widgets.append(self.text_input)
 
-            load_button = build_button("Cargar Excel", on_click=load_excel(self))
+            self.status_label = build_label("")
+            load_button = build_button(
+                "Cargar Excel", on_click=load_excel(self))
 
             start_button = build_button(
                 "Iniciar", on_click=self.process_ia_response)
@@ -75,32 +89,36 @@ class DashboardApp(QWidget):
 
         current_time = datetime.now() + timedelta(minutes=3)
 
+        open_data = {
+            "name": self.name_input.text(),
+            "context": self.context_input.text()
+        }
+
         for _, row in self.excel_data.iterrows():
+
+            datos_usuario = {}
+            for key, value in row.items():
+                datos_usuario[key] = value
+
             prompt = f'''
-                
                 Datos del usuario: 
-                Nombre: {row["Nombre"]}
-                DNI: {row["DNI"]}
-                Telefono: {row["Telefono"]}
-                Orden: {row["Orden"]}
-                Grupo: {row["Grupo"]}
+                {json.dumps(datos_usuario, indent=4)}
                 
                 Genera un mensaje utilizando el texto como base y sigue las siguientes instrucciones:
-                - El mensaje debe ser preciso y directo.
-                - El mensaje debe ser personalizado para el usuario.
-                - No utilices el mismo mensaje para todos los usuarios.
-                - Solo responde el mensaje, no agregues nada más.
-                - Debe incluir el nombre del usuario en el mensaje.
-                - Debe incluir el DNI del usuario en el mensaje.
-                - Debe incluir la orden del usuario en el mensaje.
-                - Debe incluir el grupo del usuario en el mensaje.
+                    - El mensaje debe ser preciso y directo.
+                    - El mensaje debe ser personalizado para el usuario.
+                    - No utilices el mismo mensaje para todos los usuarios.
+                    - Solo responde el mensaje, no agregues nada más.
+                    - Debe incluir los datos del usuario en el mensaje.
 
                 Genera un mensaje único para el usuario basado en el texto ingresado, este texto puedes modificarlo para que sea más personalizado, solo responde el mensaje, no agregues nada más:
                 {text}
             '''
 
-            worker = WhatsAppWorker(row, prompt, self.update_progress(), self.token)
+            worker = WhatsAppWorker(
+                row, prompt, self.token, open_data)
 
+            worker.signals.result.connect(self.update_progress())
             self.thread_pool.start(worker)
 
             delay = random.randint(4, 10)
@@ -108,28 +126,25 @@ class DashboardApp(QWidget):
 
     def update_progress(self):
         def handle_result(row, response, whatsapp_active):
-            def update_ui():
-                index = self.table.rowCount()
-                self.table.insertRow(index)
-                self.table.setItem(index, 0, QTableWidgetItem(row["Nombre"]))
-                self.table.setItem(index, 1, QTableWidgetItem(str(row["DNI"])))
-                self.table.setItem(
-                    index, 2, QTableWidgetItem(str(row["Telefono"])))
-                self.table.setItem(index, 3, QTableWidgetItem(
-                    'Activo' if whatsapp_active else 'Inactivo'))
-                print(response)
-                self.table.setItem(index, 4, QTableWidgetItem(response))
-                self.table.setItem(index, 5, QTableWidgetItem(
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            index = self.table.rowCount()
+            self.table.insertRow(index)
+            self.table.setItem(index, 0, QTableWidgetItem(row["Nombre"]))
+            self.table.setItem(index, 1, QTableWidgetItem(str(row["DNI"])))
+            self.table.setItem(
+                index, 2, QTableWidgetItem(str(row["Telefono"])))
+            self.table.setItem(index, 3, QTableWidgetItem(
+                'Activo' if whatsapp_active else 'Inactivo'))
+            self.table.setItem(index, 4, QTableWidgetItem(response))
+            self.table.setItem(index, 5, QTableWidgetItem(
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
-                self.current_progress += 1
-                self.progress_bar.setValue(self.current_progress)
-                self.progress_label.setText(
-                    f"Procesado: {row['Nombre']} ({row['Telefono']})")
+            self.current_progress += 1
+            self.progress_bar.setValue(self.current_progress)
+            self.progress_label.setText(
+                f"Procesado: {row['Nombre']} ({row['Telefono']})")
 
-                if self.current_progress == self.progress_bar.maximum():
-                    self.progress_label.setText("Finalizado ✅")
-            update_ui()
+            if self.current_progress == self.progress_bar.maximum():
+                self.progress_label.setText("Finalizado ✅")
         return handle_result
 
     def show_excel_data_dynamic(self):
